@@ -20,7 +20,7 @@ Below is an example of using the script and providing the API keys via environme
 # Providing Tenable.io access key and secret key by CLI
 Providing the API keys on the command line is not recommended because the CLI history is stored, which could allow someone to retrieve your API keys.  Sometimes the need comes up, so this is an example of how to run the script by providing the API keys on the CLI:
 
-`bash$ ./tag2targetgroup.py --accesskey ********* --secretkey ********* --tagname criticality --tagvalue high --targetgroup "Critical assets"`
+    bash$ ./tag2targetgroup.py --accesskey **** --secretkey **** --tagname criticality --tagvalue high --targetgroup "Critical assets"
 
 # Create a target group based on operating system
 This example creates a target group called "Windows Systems".  This assumes a Tenable.io tag has been created that has the name "os" and has the value "windows".  Ideally that tag should have an automatical matching rule to add the tag to anything with the "Operating System" containing "Windows"
