@@ -10,6 +10,7 @@ To use this script, you will need an Tenable.io API access key and secret key.  
 # Providing Tenable.io access key and secret key by environment variable
 
 Below is an example of using the script and providing the API keys via environment variables.
+
 `bash$ export TIOACCESSKEY==********************************************
 
 bash$ export TIOSECRETKEY=********************************************
@@ -23,11 +24,13 @@ Providing the API keys on the command line is not recommended because the CLI hi
 
 # Create a target group based on operating system
 This example creates a target group called "Windows Systems".  This assumes a Tenable.io tag has been created that has the name "os" and has the value "windows".  Ideally that tag should have an automatical matching rule to add the tag to anything with the "Operating System" containing "Windows"
+
 `./tag2targetgroup.py --tagname os --tagvalue windows --targetgroup "Windows Systems" `
 
 
 # Create a target group based on multiple tags
 This example creates a target group called "Windows Systems".  This assumes there are multiple Tenable.io tags that have been created that tag various windows systems.  Ideally that tag should have an automatical matching rule to add the tag to anything with the "Operating System" containing "Windows"
+
 `./tag2targetgroup.py --tagname os --tagvalue "Windows Desktops" --targetgroup "Windows Systems" 
 
 ./tag2targetgroup.py --tagname os --tagvalue "Windows Servers" --targetgroup "Windows Systems" --append`
