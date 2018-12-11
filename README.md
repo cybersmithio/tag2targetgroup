@@ -1,6 +1,12 @@
 # tag2targetgroup
 Takes all the assets with certain tags in Tenable.io and creates a target group based on those assets.  This allows scanning, reporting, and RBAC rules by tags.
 
+# Prerequisites
+
+This should run on either Python 2 or 3.  It requires some additional libraries, so run this pip command to install them:
+
+    pip install tenable_io ipaddr netaddr
+
 # Getting Help
     ./tag2targetgroup.py -h
 
