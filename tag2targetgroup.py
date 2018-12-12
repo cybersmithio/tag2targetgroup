@@ -4,8 +4,8 @@
 # The output file is called tio-asset-download.csv
 #
 # Example usage with environment variables:
-# TIOACCESSKEY="********************"; export TIOACCESSKEY
-# TIOSECRETKEY="********************"; export TIOSECRETKEY
+# export TIO_ACCESS_KEY="********************"
+# export TIO_SECRET_KEY="********************"
 # ./tio-asset-download.py
 #
 # This script requires the Tenable.io Python SDK to be installed.
@@ -25,7 +25,7 @@ import netaddr
 import ipaddr
 
 #Right now, host and port are ignored
-def DownloadAssetList(DEBUG,accesskey,secretkey,host,port,tagname,tagvalue,targetgroup,limitsubnet):
+def DownloadAssetList(DEBUG,accesskey,secretkey,host,port,tagname,tagvalue,targetgroup,limitsubnet,action):
     if limitsubnet == "":
         LIMITSUBNET=False
         if DEBUG:
@@ -178,7 +178,10 @@ def DownloadAssetList(DEBUG,accesskey,secretkey,host,port,tagname,tagvalue,targe
                                     print("Adding "+str(k)+" to the target group.")
 
     print("The final target group member list is: "+tgaddresses)
-    UpdateTargetGroup(DEBUG,client,targetgroup,tgaddresses)
+    if action == "overwrite":
+        UpdateTargetGroup(DEBUG,client,targetgroup,tgaddresses)
+    elif action == "append":
+        AppendTargetGroup(DEBUG, client, targetgroup, tgaddresses)
     return(True)
 
 
@@ -192,16 +195,40 @@ def GetTargetGroupByName(DEBUG,client,targetgroup):
         if i['name'] == targetgroup:
             if DEBUG:
                 print("Found the target group ID: ",i['id'])
-            return(i['id'])
+            return([i['id'],i['members']])
     return(False)
+
+def AppendTargetGroup(DEBUG,client,targetgroup,tgaddresses):
+    if DEBUG:
+        print("Appending the new addresses to the target group of "+str(targetgroup))
+
+    tg=GetTargetGroupByName(DEBUG,client,targetgroup)
+    if not tg:
+        if DEBUG:
+            print("Target group not found. Creating a new one instead of appending")
+        resp=client.post("target-groups",{"name": targetgroup,"members": str(tgaddresses), "type": "system"})
+        respdata=json.loads(resp.text)
+        if DEBUG:
+            print("Response when attempting to create target group:",respdata)
+    else:
+        if DEBUG:
+            print("Target group exists. Appending members list with new addresses")
+            print("Existing member list is: "+str(tg[1]))
+
+        resp=client.put("target-groups/"+str(tg[0]),{"name": targetgroup,"members": str(tg[1])+","+str(tgaddresses), "type": "system"})
+        respdata=json.loads(resp.text)
+        if DEBUG:
+            print("Response when attempting to create target group:",respdata)
+
+
 
 
 def UpdateTargetGroup(DEBUG,client,targetgroup,tgaddresses):
     if DEBUG:
         print("Replacing the target group members of "+str(targetgroup)+" with new addresses")
 
-    tgid=GetTargetGroupByName(DEBUG,client,targetgroup)
-    if not tgid:
+    tg=GetTargetGroupByName(DEBUG,client,targetgroup)
+    if not tg:
         if DEBUG:
             print("Target group not found. Creating a new one.")
         resp=client.post("target-groups",{"name": targetgroup,"members": str(tgaddresses), "type": "system"})
@@ -211,7 +238,7 @@ def UpdateTargetGroup(DEBUG,client,targetgroup,tgaddresses):
     else:
         if DEBUG:
             print("Target group exists. Updating members list with new list")
-        resp=client.put("target-groups/"+str(tgid),{"name": targetgroup,"members": str(tgaddresses), "type": "system"})
+        resp=client.put("target-groups/"+str(tg[0]),{"name": targetgroup,"members": str(tgaddresses), "type": "system"})
         respdata=json.loads(resp.text)
         if DEBUG:
             print("Response when attempting to create target group:",respdata)
@@ -235,6 +262,8 @@ parser.add_argument('--secretkey',help="The Tenable.io secret key",nargs=1,actio
 parser.add_argument('--host',help="The Tenable.io host. (Default is cloud.tenable.com)",nargs=1,action="store")
 parser.add_argument('--port',help="The Tenable.io port. (Default is 443)",nargs=1,action="store")
 parser.add_argument('--debug',help="Turn on debugging",action="store_true")
+parser.add_argument('--append',help="For whatever asset IP addresses match, just append their IP addresses to the existing group membership.",action="store_true")
+
 args=parser.parse_args()
 
 DEBUG=False
@@ -247,10 +276,10 @@ if args.debug:
 
 # Pull as much information from the environment variables
 # as possible, and where missing then initialize the variables.
-if os.getenv('TIOACCESSKEY') is None:
+if os.getenv('TIO_ACCESS_KEY') is None:
     accesskey = ""
 else:
-    accesskey = os.getenv('TIOACCESSKEY')
+    accesskey = os.getenv('TIO_ACCESS_KEY')
 
 # If there is an access key specified on the command line, this override anything else.
 try:
@@ -260,10 +289,11 @@ except:
     nop = 0
 
 
-if os.getenv('TIOSECRETKEY') is None:
+if os.getenv('TIO_SECRET_KEY') is None:
     secretkey = ""
 else:
-    secretkey = os.getenv('TIOSECRETKEY')
+    secretkey = os.getenv('TIO_SECRET_KEY')
+
 
 # If there is an  secret key specified on the command line, this override anything else.
 try:
@@ -309,11 +339,20 @@ try:
 except:
     limitsubnet=""
 
+if args.append and args.remove:
+    print("You can only remove or append, not both :P")
+
+action="overwrite"
+
+if args.append:
+    action="append"
+    print("Append mode")
+
 
 
 print "Connecting to cloud.tenable.com with access key",accesskey,"to report on assets"
 
 #Download the asset list, and then build the target group
-DownloadAssetList(DEBUG,accesskey,secretkey,host,port,tagname,tagvalue,targetgroup,limitsubnet)
+DownloadAssetList(DEBUG,accesskey,secretkey,host,port,tagname,tagvalue,targetgroup,limitsubnet,action)
 
 
