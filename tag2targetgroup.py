@@ -88,49 +88,15 @@ def DownloadAssetList(DEBUG,accesskey,secretkey,host,port,tagname,tagvalue,targe
         #Loop through all the downloaded assets, parse the values, and match based on the tag.
         for i in respdata:
             #Break out fields with multiple values into a multi-line cell
-            os=""
-            for j in i['operating_systems']:
-                os=os+str(j)+"\n"
-
-            ipv4=""
-            for j in i['ipv4s']:
-                ipv4=ipv4+str(j)+"\n"
-
-            ipv6=""
-            for j in i['ipv6s']:
-                ipv6=ipv6+str(j)+"\n"
-
-            netbios_name=""
-            for j in i['netbios_names']:
-                netbios_name=netbios_name+str(j)+"\n"
-
-            fqdn=""
-            for j in i['fqdns']:
-                fqdn=fqdn+str(j)+"\n"
-
-            mac=""
-            for j in i['mac_addresses']:
-                mac=mac+str(j)+"\n"
-
-            tags=""
-            for j in i['tags']:
-                tags=tags+str(j)+"\n"
-
-            try:
-                id=i['id']
-            except:
-                id = ""
-
-            try:
-                last_seen=i['last_seen']
-            except:
-                last_seen = ""
-
-            try:
-                sources=i['sources']
-            except:
-                sources = ""
-
+            os = '\n'.join(i['operating_systems'])
+            ipv4 = '\n'.join(i['ipv4s'])
+            ipv6 = '\n'.join(i['ipv6s'])
+            netbios_name = '\n'.join(i['netbios_names'])
+            fqdn = '\n'.join(i['fqdns'])
+            mac = '\n'.join(i['mac_addresses'])
+            id=i['id'] if 'id' in i else ''
+            last_seen=i['last_seen'] if 'last_seen' in i else ''
+            sources=i['sources'] if 'sources' in i else ''
             try:
                 if i['has_agent'] == "TRUE":
                     agent=True
@@ -339,8 +305,6 @@ try:
 except:
     limitsubnet=""
 
-if args.append and args.remove:
-    print("You can only remove or append, not both :P")
 
 action="overwrite"
 
