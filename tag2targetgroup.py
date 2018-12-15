@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # Takes a Tenable.io asset data and generates a CSV report.
 # The output file is called tio-asset-download.csv
@@ -12,14 +12,14 @@
 # If this is not already done, then run pip install tenable_io
 #
 # Requires the following:
-#   pip install tenable_io ipaddr netaddr
+#   pip install pytenable ipaddr netaddr
 
 import json
 import os
 import csv
 import sys
 import time
-from tenable_io.client import TenableIOClient
+from tenable.io import TenableIO
 import argparse
 import netaddr
 import ipaddr
@@ -53,115 +53,97 @@ def DownloadAssetList(DEBUG,accesskey,secretkey,host,port,tagname,tagvalue,targe
                     print("Adding " + str(j) + " to the subnets to limit by")
 
     #Create the connection to Tenable.io
-    client = TenableIOClient(access_key=accesskey, secret_key=secretkey)
-
-    #Gather the list of assets
-    resp=client.post("assets/export",{"chunk_size": "1000"})
-    respdata=json.loads(resp.text)
-
-    exportuuid=str(respdata['export_uuid'])
-    print("Export UUID: "+exportuuid)
-
-
-    #Gather the list of assets
-    result="NOT"
-    while result != "FINISHED":
-        resp=client.get("assets/export/"+exportuuid+"/status")
-        respdata=json.loads(resp.text)
-        result=str(respdata['status'])
-        print("Export status:"+result)
-        time.sleep(1)
-
-    chunks = respdata['chunks_available']
+    client=TenableIO(accesskey, secretkey)
 
     #The IP addresses going into the target group
-    tgaddresses=""
+    tgaddresses=[]
 
-    #Start iterating through the chunks and download.
-    for i in chunks:
+    #Gather the list of assets
+    assets=client.exports.assets()
+
+
+    #Loop through all the downloaded assets, parse the values, and match based on the tag.
+    for i in assets:
         if DEBUG:
-            print("Downloading chunk "+str(i))
-
-        resp=client.get("assets/export/"+exportuuid+"/chunks/"+str(i))
-        respdata=json.loads(resp.text)
-
-        #Loop through all the downloaded assets, parse the values, and match based on the tag.
-        for i in respdata:
-            #Break out fields with multiple values into a multi-line cell
-            os = '\n'.join(i['operating_systems'])
-            ipv4 = '\n'.join(i['ipv4s'])
-            ipv6 = '\n'.join(i['ipv6s'])
-            netbios_name = '\n'.join(i['netbios_names'])
-            fqdn = '\n'.join(i['fqdns'])
-            mac = '\n'.join(i['mac_addresses'])
-            id=i['id'] if 'id' in i else ''
-            last_seen=i['last_seen'] if 'last_seen' in i else ''
-            sources=i['sources'] if 'sources' in i else ''
-            try:
-                if i['has_agent'] == "TRUE":
-                    agent=True
-                else:
-                    agent=False
-            except:
+            print("Asset info:", i)
+        #Break out fields with multiple values into a multi-line cell
+        os = '\n'.join(i['operating_systems'])
+        ipv4 = '\n'.join(i['ipv4s'])
+        ipv6 = '\n'.join(i['ipv6s'])
+        netbios_name = '\n'.join(i['netbios_names'])
+        fqdn = '\n'.join(i['fqdns'])
+        mac = '\n'.join(i['mac_addresses'])
+        id=i['id'] if 'id' in i else ''
+        last_seen=i['last_seen'] if 'last_seen' in i else ''
+        sources=i['sources'] if 'sources' in i else ''
+        try:
+            if i['has_agent'] == "TRUE":
+                agent=True
+            else:
                 agent=False
+        except:
+            agent=False
 
-            #Now process the data for this asset
-            for j in i['tags']:
+        #Now process the data for this asset
+        for j in i['tags']:
+            if DEBUG:
+                print("Tags:",j)
+            if j['key'] == tagname:
                 if DEBUG:
-                    print("Tags:",j)
-                if j['key'] == tagname:
+                    print("Asset ID "+str(id)+" has a tag matching "+str(tagname))
+                if j['value'] == tagvalue:
                     if DEBUG:
-                        print("Asset ID "+str(id)+" has a tag matching "+str(tagname))
-                    if j['value'] == tagvalue:
-                        if DEBUG:
-                            print("\n\n\nAsset ID " + str(id) + " tag value matches " + str(tagvalue))
-                            print("This asset should be in the target group")
+                        print("\n\n\nAsset ID " + str(id) + " tag value matches " + str(tagvalue))
+                        print("This asset should be in the target group")
 
-                        #Add IP addresses to the target group
-                        if LIMITSUBNET:
-                            #Only add IP addresses to the target group that are within the subnet range
-                            for k in subnetrange:
-                                n1 = ipaddr.IPNetwork(k)
-                                for m in i['ipv4s']:
-                                    n2= ipaddr.IPNetwork(m)
-                                    if n2.overlaps(n1):
-                                        if DEBUG:
-                                            print("The address "+str(n2)+" overlaps with "+str(n1)+" so "+str(m)+" it should be added to the target group.")
-                                        tgaddresses = tgaddresses + str(m) + ","
-                                    else:
-                                        if DEBUG:
-                                            print("The address "+str(n2)+" does not overlap with "+str(n1)+" so "+str(m)+" is not being added to the target group.")
+                    #Add IP addresses to the target group
+                    if LIMITSUBNET:
+                        #Only add IP addresses to the target group that are within the subnet range
+                        for k in subnetrange:
+                            n1 = ipaddr.IPNetwork(k)
+                            for m in i['ipv4s']:
+                                n2= ipaddr.IPNetwork(m)
+                                if n2.overlaps(n1):
+                                    if DEBUG:
+                                        print("The address "+str(n2)+" overlaps with "+str(n1)+" so "+str(m)+" it should be added to the target group.")
+                                    tgaddresses.append(str(m))
+                                else:
+                                    if DEBUG:
+                                        print("The address "+str(n2)+" does not overlap with "+str(n1)+" so "+str(m)+" is not being added to the target group.")
 
-                        else:
-                            #Add all IP addresses from this host to the target group
-                            for k in i['ipv4s']:
-                                tgaddresses=tgaddresses+str(k)+","
-                                if DEBUG:
-                                    print("Adding "+str(k)+" to the target group.")
-                            for k in i['ipv6s']:
-                                tgaddresses=tgaddresses+str(k)+","
-                                if DEBUG:
-                                    print("Adding "+str(k)+" to the target group.")
+                    else:
+                        #Add all IP addresses from this host to the target group
+                        for k in i['ipv4s']:
+                            tgaddresses.append(str(k))
+                            if DEBUG:
+                                print("Adding "+str(k)+" to the target group.")
+                        for k in i['ipv6s']:
+                            tgaddresses.append(str(k))
+                            if DEBUG:
+                                print("Adding "+str(k)+" to the target group.")
 
-    print("The final target group member list is: "+tgaddresses)
+    if DEBUG:
+        print("The final target group member list is: ",tgaddresses)
     if action == "overwrite":
         UpdateTargetGroup(DEBUG,client,targetgroup,tgaddresses)
     elif action == "append":
         AppendTargetGroup(DEBUG, client, targetgroup, tgaddresses)
     return(True)
 
-
 def GetTargetGroupByName(DEBUG,client,targetgroup):
     if DEBUG:
         print("Finding Target Group ID of target group named "+str(targetgroup))
 
-    resp = client.get("target-groups")
-    respdata = json.loads(resp.text)
-    for i in respdata['target_groups']:
+    for i in client.target_groups.list():
         if i['name'] == targetgroup:
             if DEBUG:
                 print("Found the target group ID: ",i['id'])
-            return([i['id'],i['members']])
+            tgaddresses = i['members'].split(',')
+            if DEBUG:
+                print("Members include: ")
+                for j in tgaddresses:
+                    print(j)
+            return([i['id'],tgaddresses])
     return(False)
 
 def AppendTargetGroup(DEBUG,client,targetgroup,tgaddresses):
@@ -170,24 +152,18 @@ def AppendTargetGroup(DEBUG,client,targetgroup,tgaddresses):
 
     tg=GetTargetGroupByName(DEBUG,client,targetgroup)
     if not tg:
-        if DEBUG:
-            print("Target group not found. Creating a new one instead of appending")
-        resp=client.post("target-groups",{"name": targetgroup,"members": str(tgaddresses), "type": "system"})
-        respdata=json.loads(resp.text)
+        print("Target group not found. Creating a new one instead of appending")
+        respdata=client.target_groups.create(targetgroup,members=tgaddresses,type="system")
         if DEBUG:
             print("Response when attempting to create target group:",respdata)
     else:
+        print("Target group exists. Appending members list with new addresses")
         if DEBUG:
-            print("Target group exists. Appending members list with new addresses")
             print("Existing member list is: "+str(tg[1]))
 
-        resp=client.put("target-groups/"+str(tg[0]),{"name": targetgroup,"members": str(tg[1])+","+str(tgaddresses), "type": "system"})
-        respdata=json.loads(resp.text)
+        respdata=client.target_groups.edit(int(tg[0]),members=tg[1]+tgaddresses,type="system")
         if DEBUG:
             print("Response when attempting to create target group:",respdata)
-
-
-
 
 def UpdateTargetGroup(DEBUG,client,targetgroup,tgaddresses):
     if DEBUG:
@@ -195,17 +171,13 @@ def UpdateTargetGroup(DEBUG,client,targetgroup,tgaddresses):
 
     tg=GetTargetGroupByName(DEBUG,client,targetgroup)
     if not tg:
-        if DEBUG:
-            print("Target group not found. Creating a new one.")
-        resp=client.post("target-groups",{"name": targetgroup,"members": str(tgaddresses), "type": "system"})
-        respdata=json.loads(resp.text)
+        print("Target group not found. Creating a new one.")
+        respdata=client.target_groups.create(targetgroup,tgaddresses,type="system")
         if DEBUG:
             print("Response when attempting to create target group:",respdata)
     else:
-        if DEBUG:
-            print("Target group exists. Updating members list with new list")
-        resp=client.put("target-groups/"+str(tg[0]),{"name": targetgroup,"members": str(tgaddresses), "type": "system"})
-        respdata=json.loads(resp.text)
+        print("Target group exists. Updating members list with new list")
+        respdata=client.target_groups.edit(int(tg[0]),members=tgaddresses,type="system")
         if DEBUG:
             print("Response when attempting to create target group:",respdata)
 
@@ -314,7 +286,7 @@ if args.append:
 
 
 
-print "Connecting to cloud.tenable.com with access key",accesskey,"to report on assets"
+print("Connecting to cloud.tenable.com with access key",accesskey,"to report on assets")
 
 #Download the asset list, and then build the target group
 DownloadAssetList(DEBUG,accesskey,secretkey,host,port,tagname,tagvalue,targetgroup,limitsubnet,action)
